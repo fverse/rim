@@ -1,2 +1,2 @@
 # cheeder
-MySQL seeder 
+Cheeder is a standalone database seeder for MySQL.
