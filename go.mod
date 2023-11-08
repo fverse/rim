@@ -1,4 +1,4 @@
-module github.com/f010/cder
+module github.com/f010/strap
 
 go 1.21.3
 

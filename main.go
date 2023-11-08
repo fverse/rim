@@ -11,7 +11,7 @@ func main() {
 	versionCmd := cobra.Command{
 		Use: "version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("cheeder version: %v\n", VERSION)
+			fmt.Printf("Strap version: %v\n", VERSION)
 		},
 	}
 
@@ -19,7 +19,7 @@ func main() {
 		Use: "seeder:create",
 		Run: Create,
 	}
-	cmds := &cobra.Command{Use: "cheeder"}
+	cmds := &cobra.Command{Use: "strap"}
 	cmds.AddCommand(&versionCmd, &initCmd)
 	cmds.Execute()
 }
