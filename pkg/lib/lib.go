@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -27,7 +28,7 @@ migration_directory = "db/migrations"
 seeder_directory = ""
 `
 
-// Default migrations directory
+// Default migration files directory
 var migrationsDir string = "db/migrations"
 
 type Config struct {
@@ -173,10 +174,121 @@ func CreateMigrationFile(c *cobra.Command, args []string) {
 	}
 }
 
-func MigrateUp(c *cobra.Command, args []string) {
-	// TODO
+func tableExists(conn *pgx.Conn, tableName string) bool {
+	var exists bool
+	err := conn.QueryRow(context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1)",
+		tableName).Scan(&exists)
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	return exists
 }
 
-func Undo(c *cobra.Command, args []string) {
+func createMigrationsTable(conn *pgx.Conn) {
+	// TODO: migrations table name should be configurable through config file
+	exists := tableExists(conn, "migrations")
+
+	if !exists {
+		query := `
+	    CREATE TABLE migrations (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(100),
+		timestamp TIMESTAMP DEFAULT current_timestamp
+		);
+	`
+		_, err := conn.Query(context.Background(), query)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+}
+
+func findExecutedMigrations(conn *pgx.Conn) []*Migration {
+	var rows pgx.Rows
+	var migrations []*Migration
+	rows, err := conn.Query(context.Background(), `
+	SELECT * FROM migrations`,
+	)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	for rows.Next() {
+		var m Migration
+		if err = rows.Scan(
+			&m.Id,
+			&m.Name,
+			&m.Timestamp,
+		); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		migrations = append(migrations, &m)
+	}
+	return migrations
+}
+
+// Get the list of files inside the 'migrations' directory
+func listMigrationFiles(conf *Config) []string {
+	if conf.Migration.Directory != "" {
+		migrationsDir = conf.Migration.Directory
+	}
+	path := filepath.Join(".", migrationsDir)
+
+	var files []string
+	contents, err := os.ReadDir(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	for _, migration := range contents {
+		files = append(files, migration.Name())
+	}
+	return files
+}
+
+func (db *DatabaseManager) MigrateUp(c *cobra.Command, args []string) {
+	// conn := connectDatabase(&lib.Config{})
+	// defer d.Connection.Close(context.Background())
+	// Create the migrations table if not exists
+	createMigrationsTable(db.Connection)
+
+	// Find completed migrations from migrations table
+	executedMigrations := findExecutedMigrations(db.Connection)
+
+	fmt.Println("executed migrations: ", executedMigrations)
+
+	// List the migration files that are available in the migrations directory
+	migrationFiles := listMigrationFiles(db.Config)
+	fmt.Println("migrationFiles:", migrationFiles)
+
+	if len(migrationFiles) == 0 {
+		fmt.Fprintln(os.Stderr, "No migration files found")
+		os.Exit(1)
+	}
+
+	var pendingMigrations []string
+
+outer:
+	for _, f := range migrationFiles {
+		for _, m := range executedMigrations {
+			if f == m.Name {
+				continue outer
+			}
+		}
+		pendingMigrations = append(pendingMigrations, f)
+	}
+	fmt.Println("pending: ", pendingMigrations)
+
+	// TODO: Run pending migrations
+}
+
+func (d *DatabaseManager) MigrateDown(c *cobra.Command, args []string) {
 	// TODO
 }
