@@ -292,3 +292,7 @@ outer:
 func (d *DatabaseManager) MigrateDown(c *cobra.Command, args []string) {
 	// TODO
 }
+
+func migrationStatus() {
+	// TODO
+}
