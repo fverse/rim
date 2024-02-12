@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/f010/strap/pkg/lib"
+	"github.com/fverse/march/pkg/lib"
 	"github.com/jackc/pgx/v5"
 	"github.com/spf13/cobra"
 )
+
+
 
 const VERSION string = "0.01"
 
@@ -54,40 +56,43 @@ type Config struct {
 var migrationName string
 
 func main() {
-	config, err := lib.LoadConfig()
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("Config file is not found")
-			// os.Exit(1)
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+	args := os.Args
+	if len(args) > 1 && args[1] != "init" && args[1] != "version" && args[1] != "help" {
+		config, err := lib.LoadConfig()
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("Config file is not found: Run `march init`")
+				os.Exit(1)
+			} else {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
+		// var dm *lib.DatabaseManager
+
+		// fmt.Println("config.IsCredentialsValid(): ", config.IsCredentialsValid())
+
+		if config != nil && config.IsCredentialsValid() {
+			conn := connectDatabase(config)
+			// TODO:
+			_, err = lib.NewDatabaseManager(conn, config)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 	}
-	// var dm *lib.DatabaseManager
-
-	fmt.Println("config.IsCredentialsValid(): ", config.IsCredentialsValid())
-
-	// if config != nil && config.IsCredentialsValid() {
-	conn := connectDatabase(config)
-	// TODO:
-	_, err = lib.NewDatabaseManager(conn, config)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	// }
 
 	versionCmd := cobra.Command{
 		Use: "version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("strap version: %v\n", VERSION)
+			fmt.Printf("march version: %v\n", VERSION)
 		},
 	}
 
 	initCmd := cobra.Command{
 		Use:   "init",
-		Short: "Initializes a strap project",
+		Short: "Initializes a march project",
 		Run:   lib.Init,
 	}
 
@@ -102,11 +107,11 @@ func main() {
 	migrateCmd := cobra.Command{
 		Use:   "migration:run [flags]",
 		Short: "Runs pending migrations",
-		Run:   lib.MigrateUp,
+		// Run:   lib.MigrateUp,
 	}
 
 	rootCmd := &cobra.Command{
-		Use:   "strap",
+		Use:   "march",
 		Short: "A  tool for PostgreSQL database migration and seeding",
 	}
 	rootCmd.AddCommand(
@@ -115,7 +120,7 @@ func main() {
 		&generateMigrationCmd,
 		&migrateCmd,
 	)
-	if err = rootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

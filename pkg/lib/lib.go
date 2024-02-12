@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -85,7 +86,7 @@ func (c *Config) IsCredentialsValid() bool {
 }
 
 func LoadConfig() (*Config, error) {
-	f := "strap.toml"
+	f := "march.toml"
 	if _, err := os.Stat(f); err != nil {
 		return nil, err
 	}
@@ -99,6 +100,25 @@ func LoadConfig() (*Config, error) {
 	return &conf, nil
 }
 
+// Initializes an empty git repo for the project 
+func initGitRepo(path string) error {
+	if len(path) <= 0 {
+		path = "."
+	}
+	path = filepath.Join(".", path)
+	err := os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	cmd := exec.Command("git", "init", path)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func Init(c *cobra.Command, args []string) {
 	// TODO: If the config file already exists:
 	//       Check if there is data in the config file that set by user
@@ -106,9 +126,8 @@ func Init(c *cobra.Command, args []string) {
 	//       If data: Accept a flag to override the config file contents
 
 	// TODO?: Add the config file to .gitignore
-	// TODO: The config variables should be able take from env files as well, instead of strap's config file
-	fmt.Println("creating ")
-	file, err := os.Create("strap.toml")
+	// TODO: The config variables should be able take from env files as well, instead of march's config file
+	file, err := os.Create("march.toml")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -120,6 +139,18 @@ func Init(c *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+ 
+	err = initGitRepo(".")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	infoMsg := `
+Initialization successful! A new configuration file 'march.toml' has been created in your current directory.
+
+Please review and update 'march.toml' with your specific settings before running migrations or seeders.`
+	fmt.Println(infoMsg)
 }
 
 func CreateMigrationFile(c *cobra.Command, args []string) {
@@ -134,7 +165,7 @@ func CreateMigrationFile(c *cobra.Command, args []string) {
 	conf, err := LoadConfig()
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, "Config file not found: Please run 'strap init'")
+			fmt.Fprintln(os.Stderr, "Config file not found: Please run 'march init'")
 		} else {
 			fmt.Fprintln(os.Stderr, err)
 		}
@@ -157,8 +188,6 @@ func CreateMigrationFile(c *cobra.Command, args []string) {
 	// FIX: Use OS specific Separator after the 'directory path' (before the filename)
 	filePath = path + "/" + fmt.Sprint(unixTimestamp) + "-" + name + ".sql"
 
-	fmt.Println("filename: ", filePath)
-
 	file, err := os.Create(filePath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -166,12 +195,44 @@ func CreateMigrationFile(c *cobra.Command, args []string) {
 	}
 	defer file.Close()
 
-	_, err = file.WriteString("MIGRATION_TEMPLATE")
+	migrationTemplate := `
+	-- Migration file template
+-- Version: [version_number]
+-- Date: [YYYY-MM-DD]
+
+-- UP (migrate)
+BEGIN;
+
+-- Your SQL statements for migrating 'up'
+-- Example: CREATE TABLE, ALTER TABLE, ADD INDEX, etc.
+CREATE TABLE example_table (
+    id SERIAL PRIMARY KEY,
+    column_name1 VARCHAR(255) NOT NULL,
+    column_name2 INT
+);
+-- Add more SQL statements as needed
+
+COMMIT;
+
+-- DOWN (rollback)
+BEGIN;
+
+-- Your SQL statements for rolling back the migration (if possible)
+-- Example: DROP TABLE, DROP COLUMN, etc.
+DROP TABLE IF EXISTS example_table;
+-- Add more SQL statements for rollback as needed
+
+COMMIT;
+`
+
+	_, err = file.WriteString(migrationTemplate)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 
 	}
+	infoMsg := fmt.Sprintf("\nCreated migration file: %s \n", filePath)
+	fmt.Println(infoMsg)
 }
 
 func tableExists(conn *pgx.Conn, tableName string) bool {
